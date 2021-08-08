@@ -2,8 +2,12 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
+	"math/rand"
 	"os"
+	"strings"
+	"time"
 )
 
 type Question struct {
@@ -19,7 +23,10 @@ func parseCsv(filename string) ([]Question, error) {
 
 	defer f.Close()
 
-	lines, err := csv.NewReader(f).ReadAll()
+	reader := csv.NewReader(f)
+	reader.FieldsPerRecord = -1
+	reader.TrimLeadingSpace = true
+	lines, err := reader.ReadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -34,30 +41,54 @@ func parseCsv(filename string) ([]Question, error) {
 	return questions, nil
 }
 
+func timer(seconds int, correct *int, incorrect *int) {
+	time.Sleep(time.Duration(seconds) * time.Second)
+	fmt.Println("Time's up!")
+	fmt.Println(fmt.Sprintf("\nYour score: %d/%d", *correct, *correct+*incorrect))
+	os.Exit(0)
+}
+
 func main() {
-	result, err := parseCsv("./problems.csv")
+	timeout := flag.Int("timeout", -1, "The number of seconds to run the quiz game. Disabled by default.")
+	shuffle := flag.Bool("shuffle", false, "Shuffle the questions.")
+	input := flag.String("input", "./problems.csv", "The path to the quiz questions csv.")
+	flag.Parse()
+
+	questions, err := parseCsv(*input)
 	if err != nil {
 		fmt.Println("Error parsing contents of csv: ", err)
 		os.Exit(1)
 	}
 
 	fmt.Println("Welcome to the quiz! You'll be given questions you have to answer. Your score will be displayed at the end.")
+	fmt.Print("Press ENTER when you're ready to begin!")
+	fmt.Scanln()
 
 	var answer string
 	var correct int
-	var incorrect int
+	total := len(questions)
 
-	for _, v := range result {
+	if *shuffle {
+		rand.Seed(time.Now().UnixNano())
+		rand.Shuffle(len(questions), func(i, j int) { questions[i], questions[j] = questions[j], questions[i] })
+	}
+
+	if *timeout > 0 {
+		go timer(*timeout, &correct, &total)
+	}
+
+	for _, v := range questions {
 		fmt.Print(fmt.Sprintf("%s: ", v.problem))
 		fmt.Scanln(&answer)
-		if answer == v.answer {
+		answer = strings.TrimSpace(answer)
+
+		if strings.ToLower(answer) == strings.ToLower(v.answer) {
 			correct += 1
 			fmt.Println("Correct!")
 		} else {
-			incorrect += 1
 			fmt.Println("Wrong :(")
 		}
 	}
 
-	fmt.Println(fmt.Sprintf("\nYour score: %d/%d", correct, correct+incorrect))
+	fmt.Println(fmt.Sprintf("\nYour score: %d/%d", correct, correct+total))
 }
